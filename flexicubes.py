@@ -66,7 +66,7 @@ class FlexiCubes:
                 dtype = voxelgrid_vertices.dtype
             else:
                 dtype = torch.float32
-
+        #cast all to dtype, so that it works with half-precision:
         voxelgrid_vertices = voxelgrid_vertices.to(dtype)  # Cast the geometry to the chosen dtype
         scalar_field = scalar_field.to(dtype)
         if beta is not None:
@@ -317,13 +317,8 @@ class FlexiCubes:
         vd_num_edges = torch.cat(vd_num_edges)
         vd_gamma = torch.cat(vd_gamma)
 
-<<<<<<< Updated upstream
-        vd = torch.zeros((total_num_vd, 3), device=self.device)
-        beta_sum = torch.zeros((total_num_vd, 1), device=self.device)
-=======
-        vd = torch.zeros((total_num_vd, 3), device=self.device, dtype=beta.dtype)
-        beta_sum = torch.zeros((total_num_vd, 1), device=self.device, dtype=beta.dtype)
->>>>>>> Stashed changes
+        vd = torch.zeros((total_num_vd, 3), device=self.device, dtype=beta.dtype)#dtype so that it works with half-precision
+        beta_sum = torch.zeros((total_num_vd, 1), device=self.device, dtype=beta.dtype)#dtype so that it works with half
 
         idx_group = torch.gather(input=idx_map.reshape(-1), dim=0, index=edge_group_to_cube * 12 + edge_group)
 
@@ -341,18 +336,9 @@ class FlexiCubes:
                                   index=edge_group_to_cube * 12 + edge_group).reshape(-1, 1)
         beta_sum = beta_sum.index_add_(0, index=edge_group_to_vd, source=beta_group)
         vd = vd.index_add_(0, index=edge_group_to_vd, source=ue_group * beta_group) / beta_sum
-<<<<<<< Updated upstream
-        
-        '''
-        interpolate colors use the same method as dual vertices
-        '''
-        if voxelgrid_colors is not None:
-            vd_color = torch.zeros((total_num_vd, C), device=self.device)
-=======
 
         if voxelgrid_colors is not None and surf_edges_c is not None:
             vd_color = torch.zeros((total_num_vd, C), device=self.device, dtype=beta.dtype)
->>>>>>> Stashed changes
             c_group = torch.index_select(input=surf_edges_c, index=idx_group.reshape(-1), dim=0).reshape(-1, 2, C)
             uc_group = self._linear_interp(s_group * alpha_group, c_group)
             vd_color = vd_color.index_add_(0, index=edge_group_to_vd, source=uc_group * beta_group) / beta_sum
