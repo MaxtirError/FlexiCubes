@@ -48,8 +48,8 @@ class FlexiCubes:
         self.adj_pairs = torch.tensor([0, 1, 1, 3, 3, 2, 2, 0], dtype=torch.long, device=device)
 
     def __call__(self, voxelgrid_vertices, scalar_field, cube_idx, resolution, qef_reg_scale=1e-3,
-                 weight_scale=0.99, beta=None, alpha=None, gamma_f=None, voxelgrid_colors=None,
-                 training=False, dtype=None): #dtype so that it can work with half precision.
+                 weight_scale=0.99, beta=None, alpha=None, gamma_f=None, voxelgrid_colors=None, training=False,
+                 dtype=None): #dtype so that it can work with half precision.
         """
         Optionally specify 'dtype' to unify all float inputs (e.g. torch.float16).
         If 'dtype' is None, we infer from voxelgrid_vertices or default to float32.
@@ -166,6 +166,9 @@ class FlexiCubes:
         """
         case_ids = (occ_fx8[surf_cubes] * self.cube_corners_idx.to(self.device).unsqueeze(0)).sum(-1)
 
+        # The 'problematic_configs' only contain configurations for surface cubes. Next, we construct a 3D array,
+        # 'problem_config_full', to store configurations for all cubes (with default config for non-surface cubes).
+        # This allows efficient checking on adjacent cubes.
         problem_config = self.check_table.to(self.device)[case_ids]
         to_check = problem_config[..., 0] == 1
         problem_config = problem_config[to_check]
@@ -282,6 +285,9 @@ class FlexiCubes:
         num_vd = torch.index_select(input=self.num_vd_table, index=case_ids, dim=0)
         edge_group, edge_group_to_vd, edge_group_to_cube, vd_num_edges, vd_gamma = [], [], [], [], []
         
+        # if color is not None:
+        #     vd_color = []
+
         total_num_vd = 0
         vd_idx_map = torch.zeros((case_ids.shape[0], 12), dtype=torch.long, device=self.device, requires_grad=False)
 
@@ -301,12 +307,18 @@ class FlexiCubes:
             edge_group_to_cube.append(torch.masked_select(curr_edge_group_to_cube, curr_mask))
             vd_num_edges.append(curr_mask.reshape(-1, 7).sum(-1, keepdims=True))
             vd_gamma.append(torch.masked_select(gamma_f, cur_cubes).unsqueeze(-1).repeat(1, num).reshape(-1))
+            # if color is not None:
+            #     vd_color.append(color[cur_cubes].unsqueeze(1).repeat(1, num, 1).reshape(-1, 3))
             
         edge_group = torch.cat(edge_group)
         edge_group_to_vd = torch.cat(edge_group_to_vd)
         edge_group_to_cube = torch.cat(edge_group_to_cube)
         vd_num_edges = torch.cat(vd_num_edges)
         vd_gamma = torch.cat(vd_gamma)
+        # if color is not None:
+        #     vd_color = torch.cat(vd_color)
+        # else:
+        #     vd_color = None
 
         vd = torch.zeros((total_num_vd, 3), device=self.device, dtype=beta.dtype)#dtype so that it works with half-precision
         beta_sum = torch.zeros((total_num_vd, 1), device=self.device, dtype=beta.dtype)#dtype so that it works with half
@@ -316,6 +328,7 @@ class FlexiCubes:
         x_group = torch.index_select(input=surf_edges_x, index=idx_group.reshape(-1), dim=0).reshape(-1, 2, 3)
         s_group = torch.index_select(input=surf_edges_s, index=idx_group.reshape(-1), dim=0).reshape(-1, 2, 1)
         
+
         zero_crossing_group = torch.index_select(
             input=zero_crossing, index=idx_group.reshape(-1), dim=0).reshape(-1, 3)
 
@@ -343,7 +356,7 @@ class FlexiCubes:
 
         v_idx = torch.arange(vd.shape[0], device=self.device)  # + total_num_vd
 
-        vd_idx_map = (vd_idx_map.reshape(-1)).scatter(dim=0, index=edge_group_to_cube * 
+        vd_idx_map = (vd_idx_map.reshape(-1)).scatter(dim=0, index=edge_group_to_cube *
                                                       12 + edge_group, src=v_idx[edge_group_to_vd])
 
         return vd, L_dev, vd_gamma, vd_idx_map, vd_color
@@ -376,18 +389,18 @@ class FlexiCubes:
             faces[~mask] = quad_vd_idx[~mask][:, self.quad_split_2]
             faces = faces.reshape(-1, 3)
         else:
-            vd_quad = torch.index_select(input=vd, dim=0, index=quad_vd_idx.reshape(-1)).reshape(-1, 4, 3)
+            vd_quad = torch.index_select(input=vd, index=quad_vd_idx.reshape(-1), dim=0).reshape(-1, 4, 3)
             vd_02 = (vd_quad[:, 0] + vd_quad[:, 2]) / 2
             vd_13 = (vd_quad[:, 1] + vd_quad[:, 3]) / 2
             weight_sum = (gamma_02 + gamma_13) + 1e-8
             vd_center = (vd_02 * gamma_02.unsqueeze(-1) + vd_13 * gamma_13.unsqueeze(-1)) / weight_sum.unsqueeze(-1)
             
             if vd_color is not None:
-                color_quad = torch.index_select(input=vd_color, dim=0, index=quad_vd_idx.reshape(-1)).reshape(-1, 4, vd_color.shape[-1])
+                color_quad = torch.index_select(input=vd_color, index=quad_vd_idx.reshape(-1), dim=0).reshape(-1, 4, vd_color.shape[-1])
                 color_02 = (color_quad[:, 0] + color_quad[:, 2]) / 2
                 color_13 = (color_quad[:, 1] + color_quad[:, 3]) / 2
                 color_center = (color_02 * gamma_02.unsqueeze(-1) + color_13 * gamma_13.unsqueeze(-1)) / weight_sum.unsqueeze(-1)
-                vd_color = torch.cat([vd_color, color_center], dim=0)
+                vd_color = torch.cat([vd_color, color_center])
             
             vd_center_idx = torch.arange(vd_center.shape[0], device=self.device) + vd.shape[0]
             vd = torch.cat([vd, vd_center])
