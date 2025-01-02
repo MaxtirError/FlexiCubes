@@ -32,20 +32,14 @@ class FlexiCubes:
         self.quad_split_train = torch.tensor(
             [0, 1, 1, 2, 2, 3, 3, 0], dtype=torch.long, device=device, requires_grad=False)
 
-        self.cube_corners = torch.tensor([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1],
-                                         [1, 0, 1], [0, 1, 1], [1, 1, 1]],
-                                         dtype=torch.float, device=device)
+        self.cube_corners = torch.tensor([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [
+                                         1, 0, 1], [0, 1, 1], [1, 1, 1]], dtype=torch.float, device=device)
         self.cube_corners_idx = torch.pow(2, torch.arange(8, requires_grad=False))
-        self.cube_edges = torch.tensor([
-            0, 1, 1, 5, 4, 5, 0, 4,
-            2, 3, 3, 7, 6, 7, 2, 6,
-            2, 0, 3, 1, 7, 5, 6, 4
-        ], dtype=torch.long, device=device, requires_grad=False)
+        self.cube_edges = torch.tensor([0, 1, 1, 5, 4, 5, 0, 4, 2, 3, 3, 7, 6, 7, 2, 6,
+                                       2, 0, 3, 1, 7, 5, 6, 4], dtype=torch.long, device=device, requires_grad=False)
 
-        self.edge_dir_table = torch.tensor(
-            [0, 2, 0, 2, 0, 2, 0, 2, 1, 1, 1, 1],
-            dtype=torch.long, device=device
-        )
+        self.edge_dir_table = torch.tensor([0, 2, 0, 2, 0, 2, 0, 2, 1, 1, 1, 1],
+                                           dtype=torch.long, device=device)
         self.dir_faces_table = torch.tensor([
             [[5, 4], [3, 2], [4, 5], [2, 3]],
             [[5, 4], [1, 0], [4, 5], [0, 1]],
@@ -108,10 +102,7 @@ class FlexiCubes:
                 torch.zeros((0, 3), device=self.device, dtype=dtype),
                 torch.zeros((0, 3), dtype=torch.long, device=self.device),
                 torch.zeros((0), device=self.device, dtype=dtype),
-                (
-                    torch.zeros((0, voxelgrid_colors.shape[-1]), device=self.device, dtype=dtype)
-                    if voxelgrid_colors is not None else None
-                )
+                torch.zeros((0, voxelgrid_colors.shape[-1]), device=self.device, dtype=dtype) if voxelgrid_colors is not None else None
             )
         beta, alpha, gamma_f = self._normalize_weights(
             beta, alpha, gamma_f, surf_cubes, weight_scale)
@@ -329,14 +320,17 @@ class FlexiCubes:
             input=zero_crossing, index=idx_group.reshape(-1), dim=0).reshape(-1, 3)
 
         alpha_group = torch.index_select(input=alpha_nx12x2.reshape(-1, 2), dim=0,
-                                         index=edge_group_to_cube * 12 + edge_group).reshape(-1, 2, 1)
+                                            index=edge_group_to_cube * 12 + edge_group).reshape(-1, 2, 1)
         ue_group = self._linear_interp(s_group * alpha_group, x_group)
 
         beta_group = torch.gather(input=beta.reshape(-1), dim=0,
-                                  index=edge_group_to_cube * 12 + edge_group).reshape(-1, 1)
+                                    index=edge_group_to_cube * 12 + edge_group).reshape(-1, 1)
         beta_sum = beta_sum.index_add_(0, index=edge_group_to_vd, source=beta_group)
         vd = vd.index_add_(0, index=edge_group_to_vd, source=ue_group * beta_group) / beta_sum
 
+        '''
+        interpolate colors use the same method as dual vertices
+        '''
         if voxelgrid_colors is not None and surf_edges_c is not None:
             vd_color = torch.zeros((total_num_vd, C), device=self.device, dtype=beta.dtype)
             c_group = torch.index_select(input=surf_edges_c, index=idx_group.reshape(-1), dim=0).reshape(-1, 2, C)
@@ -347,12 +341,10 @@ class FlexiCubes:
         
         L_dev = self._compute_reg_loss(vd, zero_crossing_group, edge_group_to_vd, vd_num_edges)
 
-        v_idx = torch.arange(vd.shape[0], device=self.device)
-        vd_idx_map = (vd_idx_map.reshape(-1)).scatter(
-            dim=0,
-            index=edge_group_to_cube * 12 + edge_group,
-            src=v_idx[edge_group_to_vd]
-        ).view(case_ids.shape[0], 12)
+        v_idx = torch.arange(vd.shape[0], device=self.device)  # + total_num_vd
+
+        vd_idx_map = (vd_idx_map.reshape(-1)).scatter(dim=0, index=edge_group_to_cube * 
+                                                      12 + edge_group, src=v_idx[edge_group_to_vd])
 
         return vd, L_dev, vd_gamma, vd_idx_map, vd_color
 
@@ -362,12 +354,13 @@ class FlexiCubes:
         triangles based on the gamma parameter, as described in Section 4.3.
         """
         with torch.no_grad():
-            group_mask = (edge_counts == 4) & surf_edges_mask
+            group_mask = (edge_counts == 4) & surf_edges_mask  # surface edges shared by 4 cubes.
             group = idx_map.reshape(-1)[group_mask]
-            vd_idx = vd_idx_map.reshape(-1)[group_mask]
+            vd_idx = vd_idx_map[group_mask]
             edge_indices, indices = torch.sort(group, stable=True)
             quad_vd_idx = vd_idx[indices].reshape(-1, 4)
 
+            # Ensure all face directions point towards the positive SDF to maintain consistent winding.
             s_edges = scalar_field[surf_edges[edge_indices.reshape(-1, 4)[:, 0]].reshape(-1)].reshape(-1, 2)
             flip_mask = s_edges[:, 0] > 0
             quad_vd_idx = torch.cat((quad_vd_idx[flip_mask][:, [0, 1, 3, 2]],
@@ -382,7 +375,6 @@ class FlexiCubes:
             faces[mask] = quad_vd_idx[mask][:, self.quad_split_1]
             faces[~mask] = quad_vd_idx[~mask][:, self.quad_split_2]
             faces = faces.reshape(-1, 3)
-            return vd, faces, s_edges, edge_indices, vd_color
         else:
             vd_quad = torch.index_select(input=vd, dim=0, index=quad_vd_idx.reshape(-1)).reshape(-1, 4, 3)
             vd_02 = (vd_quad[:, 0] + vd_quad[:, 2]) / 2
@@ -398,7 +390,7 @@ class FlexiCubes:
                 vd_color = torch.cat([vd_color, color_center], dim=0)
             
             vd_center_idx = torch.arange(vd_center.shape[0], device=self.device) + vd.shape[0]
-            vd = torch.cat([vd, vd_center], dim=0)
+            vd = torch.cat([vd, vd_center])
             faces = quad_vd_idx[:, self.quad_split_train].reshape(-1, 4, 2)
-            faces = torch.cat([faces, vd_center_idx.reshape(-1, 1, 1).repeat(1, 4, 1)], dim=-1).reshape(-1, 3)
-            return vd, faces, s_edges, edge_indices, vd_color
+            faces = torch.cat([faces, vd_center_idx.reshape(-1, 1, 1).repeat(1, 4, 1)], -1).reshape(-1, 3)
+        return vd, faces, s_edges, edge_indices, vd_color
