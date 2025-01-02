@@ -166,15 +166,15 @@ class FlexiCubes:
         """
         case_ids = (occ_fx8[surf_cubes] * self.cube_corners_idx.to(self.device).unsqueeze(0)).sum(-1)
 
-        # The 'problematic_configs' only contain configurations for surface cubes. Next, we construct a 3D array,
-        # 'problem_config_full', to store configurations for all cubes (with default config for non-surface cubes).
-        # This allows efficient checking on adjacent cubes.
         problem_config = self.check_table.to(self.device)[case_ids]
         to_check = problem_config[..., 0] == 1
         problem_config = problem_config[to_check]
         if not isinstance(res, (list, tuple)):
             res = [res, res, res]
 
+        # The 'problematic_configs' only contain configurations for surface cubes. Next, we construct a 3D array,
+        # 'problem_config_full', to store configurations for all cubes (with default config for non-surface cubes).
+        # This allows efficient checking on adjacent cubes.
         problem_config_full = torch.zeros(list(res) + [5], device=self.device, dtype=torch.long)
         vol_idx = torch.nonzero(problem_config_full[..., 0] == 0)  # N, 3
         vol_idx_problem = vol_idx[surf_cubes][to_check]
