@@ -13,7 +13,7 @@ FlexiCubes is a high-quality isosurface representation specifically designed for
 
 ## Getting Started
 
-The core functions of FlexiCubes are now in [Kaolin](https://github.com/NVIDIAGameWorks/kaolin/) starting from v0.15.0. See installation instructions [here](https://kaolin.readthedocs.io/en/latest/notes/installation.html) and API documentations [here](https://kaolin.readthedocs.io/en/latest/modules/kaolin.non_commercial.html#kaolin.non_commercial.FlexiCubes)
+The core functions of FlexiCubes are now in [Kaolin](https://github.com/NVIDIAGameWorks/kaolin/) starting from v0.15.0. See installation instructions [here](https://kaolin.readthedocs.io/en/latest/notes/installation.html) and API documentations [here](https://kaolin.readthedocs.io/en/latest/modules/kaolin.ops.conversions.html?highlight=flexicubes#kaolin.ops.conversions.FlexiCubes)
 
 The original code of the paper is still visible in `flexicube.py`.
 
@@ -81,11 +81,15 @@ FlexiCubes is now integrated into NVIDIA applications as a drop-in replacement f
 
 
 ## License
-Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES. 
 
-This work is made available under the [Nvidia Source Code License](LICENSE.txt).
+This work is made available under the [Apache License 2.0](LICENSE.txt).
 
-For business inquiries, please visit our website and submit the form: [NVIDIA Research Licensing](https://www.nvidia.com/en-us/research/inquiries/).
+## Contributing
+
+This project uses the [Developer Certificate of Origin 1.1](https://developercertificate.org/) to manage contributions.
+
+By submitting a pull request, you certify that you agree to the terms of the DCO. See [DCO.txt](./DCO.txt) for details.
 
 ## Citation
 ```bibtex
